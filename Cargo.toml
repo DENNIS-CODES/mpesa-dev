@@ -26,3 +26,4 @@ tower = { version = "0.5", features = ["timeout"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 rand = "0.8"
+dialoguer = "0.11"

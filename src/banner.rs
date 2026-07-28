@@ -1,4 +1,8 @@
+use std::io::IsTerminal;
+
 use colored::Colorize;
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::Select;
 
 const MARK: &str = r"███╗   ███╗
 ████╗ ████║
@@ -36,17 +40,31 @@ fn gradient_color(t: f32) -> (u8, u8, u8) {
     )
 }
 
-/// Prints the full startup banner: a welcome line, the "M" mark rendered
+/// What happened after the banner was shown.
+pub enum Choice {
+    /// The user picked an entry — index into the `subcommands` slice
+    /// that was passed in.
+    Selected(usize),
+    /// The user backed out of the picker (Esc/Ctrl+C) — run nothing.
+    Cancelled,
+    /// stdout/stdin aren't a real terminal (piped, CI, non-interactive),
+    /// so no picker was shown at all — caller should fall back to a
+    /// sane default.
+    NonInteractive,
+}
+
+/// Prints the full startup banner — a welcome line, the "M" mark rendered
 /// as a top-to-bottom color gradient with a sparkle of ambient color
-/// around it, the tagline + version + environment, and a quick command
-/// guide — so the one moment a user sees this, it also teaches them
-/// what's here. Shown once, only when `mpesa-dev` is run with no
-/// subcommand.
+/// around it, and the tagline + version + environment — then either lets
+/// the user pick a command with the arrow keys and Enter (highlighting
+/// the active one), or, if stdout/stdin isn't a real terminal, prints a
+/// static command list instead and returns [`Choice::NonInteractive`].
+/// Shown once, only when `mpesa-dev` is run with no subcommand.
 ///
-/// `subcommands` is the (name, about) list for the guide — pass it in
-/// from clap's own metadata (see `Cli::command()` in `main.rs`) rather
+/// `subcommands` is the (name, about) list for the guide/picker — pass it
+/// in from clap's own metadata (see `Cli::command()` in `main.rs`) rather
 /// than hard-coding it here, so it can't drift out of sync with `--help`.
-pub fn print_full(environment: &str, subcommands: &[(String, String)]) {
+pub fn print_full_and_choose(environment: &str, subcommands: &[(String, String)]) -> Choice {
     let rule = "·".repeat(RULE_WIDTH).dimmed();
 
     println!("{rule}");
@@ -79,11 +97,43 @@ pub fn print_full(environment: &str, subcommands: &[(String, String)]) {
     }
     println!();
 
-    print_command_guide(subcommands);
+    let choice = if std::io::stdout().is_terminal() && std::io::stdin().is_terminal() {
+        prompt_select(subcommands)
+    } else {
+        print_command_guide(subcommands);
+        Choice::NonInteractive
+    };
 
     println!();
     println!("{rule}");
     println!();
+
+    choice
+}
+
+fn prompt_select(subcommands: &[(String, String)]) -> Choice {
+    let items: Vec<String> = subcommands
+        .iter()
+        .map(|(name, description)| format!("{name:<8}{description}"))
+        .collect();
+    let default_index = subcommands
+        .iter()
+        .position(|(name, _)| name == "inspect")
+        .unwrap_or(0);
+
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("Choose a command (↑/↓, Enter)")
+        .items(&items)
+        .default(default_index)
+        .interact_opt();
+
+    match selection {
+        Ok(Some(index)) => Choice::Selected(index),
+        Ok(None) => Choice::Cancelled,
+        // A raw-mode/terminal error here shouldn't take the whole CLI down —
+        // fall back to cancelling rather than propagating the error.
+        Err(_) => Choice::Cancelled,
+    }
 }
 
 fn print_command_guide(subcommands: &[(String, String)]) {
