@@ -7,6 +7,12 @@ const MARK: &str = r"███╗   ███╗
 ██║ ╚═╝ ██║
 ╚═╝     ╚═╝";
 
+/// Ambient decoration flanking the mark — a scattering of sparks, like
+/// loose change, rather than a literal scene. Purely cosmetic; alignment
+/// doesn't need to be pixel-perfect.
+const SPARKLE_TOP: &str = "   ✦          ·                  ✦";
+const SPARKLE_BOTTOM: &str = "        ·            ✦       ·";
+
 /// Gradient endpoints for the mark: a deep M-Pesa green at the top fading
 /// to a brighter green at the bottom, so the banner reads as one
 /// deliberately designed piece rather than a flat block of color. Chosen
@@ -30,15 +36,24 @@ fn gradient_color(t: f32) -> (u8, u8, u8) {
     )
 }
 
-/// Prints the full startup banner: a dotted rule, the "M" mark rendered as
-/// a top-to-bottom color gradient, the tagline + version + environment,
-/// and a closing rule. Shown once, only when `mpesa-dev` is run with no
+/// Prints the full startup banner: a welcome line, the "M" mark rendered
+/// as a top-to-bottom color gradient with a sparkle of ambient color
+/// around it, the tagline + version + environment, and a quick command
+/// guide — so the one moment a user sees this, it also teaches them
+/// what's here. Shown once, only when `mpesa-dev` is run with no
 /// subcommand.
-pub fn print_full(environment: &str) {
+///
+/// `subcommands` is the (name, about) list for the guide — pass it in
+/// from clap's own metadata (see `Cli::command()` in `main.rs`) rather
+/// than hard-coding it here, so it can't drift out of sync with `--help`.
+pub fn print_full(environment: &str, subcommands: &[(String, String)]) {
     let rule = "·".repeat(RULE_WIDTH).dimmed();
 
     println!("{rule}");
     println!();
+    println!("{}", "Welcome to mpesa-dev.".bold());
+    println!();
+    println!("{}", SPARKLE_TOP.yellow());
 
     let lines: Vec<&str> = MARK.lines().collect();
     let last_index = lines.len().saturating_sub(1).max(1) as f32;
@@ -46,6 +61,7 @@ pub fn print_full(environment: &str) {
         let (r, g, b) = gradient_color(i as f32 / last_index);
         println!("{}", line.truecolor(r, g, b));
     }
+    println!("{}", SPARKLE_BOTTOM.yellow());
 
     println!();
     println!(
@@ -61,9 +77,27 @@ pub fn print_full(environment: &str) {
     } else {
         println!("{}", env_line.dimmed());
     }
+    println!();
 
+    print_command_guide(subcommands);
+
+    println!();
     println!("{rule}");
     println!();
+}
+
+fn print_command_guide(subcommands: &[(String, String)]) {
+    for (name, description) in subcommands {
+        let padded = format!("{name:<8}");
+        // `inspect` is what actually runs next after this banner — call
+        // that out using the same arrow/pointer icon as everywhere else.
+        let note = if name == "inspect" {
+            format!("  {} {}", icon::arrow(), "starting now".green())
+        } else {
+            String::new()
+        };
+        println!("  {}{}{}", padded.cyan().bold(), description.dimmed(), note);
+    }
 }
 
 /// Prints a short, consistent header before a command's own output —
