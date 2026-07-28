@@ -101,7 +101,8 @@ fn reachability_detail(url: &str, status: reqwest::StatusCode) -> String {
         format!(
             "{url} is reachable — HTTP {status} (a non-2xx status is fine here; \
              this only confirms the network path works, not that this exact route exists)"
-        ).to_string()
+        )
+        .to_string()
     }
 }
 
@@ -122,7 +123,8 @@ pub async fn run(config: &Config) -> Result<()> {
             "consumer key/secret configured",
             e.to_string(),
             "run `cp .mpesa-dev.toml.example .mpesa-dev.toml` and fill in your Daraja app's \
-             consumer key/secret, or set MPESA_CONSUMER_KEY / MPESA_CONSUMER_SECRET".to_string(),
+             consumer key/secret, or set MPESA_CONSUMER_KEY / MPESA_CONSUMER_SECRET"
+                .to_string(),
         ),
     }
     .with_duration(start.elapsed());
