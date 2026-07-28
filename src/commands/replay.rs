@@ -23,15 +23,20 @@ pub async fn run(
     };
 
     let path = callback_store::resolve(&selector)?;
-    let mut body = std::fs::read_to_string(&path)?;
+    let body = std::fs::read_to_string(&path)?;
 
     println!("{} Replaying {}", icon::arrow(), path.display());
     println!("  {}", callback_store::summarize(&path));
 
-    if corrupt {
-        body = corrupt_payload(&body);
-        println!("  {} payload corrupted before sending", icon::warn());
-    }
+    let body = if corrupt {
+        let corrupted = corrupt_payload(&body);
+        println!("  {} payload corrupted before sending:", icon::warn());
+        println!();
+        print_diff(&body, &corrupted);
+        corrupted
+    } else {
+        body
+    };
 
     if let Some(ms) = delay {
         println!("  {} delaying {ms}ms before sending", icon::arrow());
@@ -92,6 +97,46 @@ async fn send_once(http: &reqwest::Client, target: &str, body: &str) {
             println!("{} failed to reach {target}: {e}", icon::fail());
         }
     }
+}
+
+/// Prints a git-diff-style, line-by-line comparison of the original and
+/// corrupted payload: unchanged lines dimmed, removed lines on a red
+/// background, added/changed lines on a green background — so it's
+/// obvious at a glance exactly what `--corrupt` did before it goes out
+/// over the wire.
+fn print_diff(original: &str, corrupted: &str) {
+    let orig_lines: Vec<&str> = original.lines().collect();
+    let new_lines: Vec<&str> = corrupted.lines().collect();
+    let total = orig_lines.len().max(new_lines.len());
+
+    for i in 0..total {
+        let num = i + 1;
+        match (orig_lines.get(i), new_lines.get(i)) {
+            (Some(a), Some(b)) if a == b => {
+                println!("  {num:>3}   {}", a.dimmed());
+            }
+            (Some(a), Some(b)) => {
+                println!("  {num:>3} {} {}", "-".black().on_red(), a.black().on_red());
+                println!(
+                    "  {num:>3} {} {}",
+                    "+".black().on_green(),
+                    b.black().on_green()
+                );
+            }
+            (Some(a), None) => {
+                println!("  {num:>3} {} {}", "-".black().on_red(), a.black().on_red());
+            }
+            (None, Some(b)) => {
+                println!(
+                    "  {num:>3} {} {}",
+                    "+".black().on_green(),
+                    b.black().on_green()
+                );
+            }
+            (None, None) => {}
+        }
+    }
+    println!();
 }
 
 /// Truncates the payload partway through and appends a marker, reliably

@@ -301,7 +301,19 @@ cargo run -- replay 1 --corrupt        # truncate the payload before sending,
 
 `--corrupt` truncates the JSON at ~80% of its length and appends a marker,
 which reliably produces invalid JSON — useful for confirming `inspect` (or
-your own callback handler) doesn't crash on a bad body.
+your own callback handler) doesn't crash on a bad body. Before sending, it
+prints a git-diff-style comparison of the original vs. corrupted payload —
+unchanged lines dimmed, removed lines on a red background, the
+added/changed line on a green background — so it's obvious exactly what
+changed:
+
+```
+   20   "CheckoutRequestID": "ws_CO_1",
+ 21 -  "MerchantRequestID": "m-1",
+ 21 +  "MerchantRequestID": " <-- truncated by mpesa-dev replay --corrupt
+ 22 -  "ResultCode": 0,
+ 23 -  "ResultDesc": "The service request is processed successfully."
+```
 
 ## Packaging / installing
 
