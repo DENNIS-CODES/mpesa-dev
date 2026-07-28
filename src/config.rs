@@ -17,6 +17,11 @@ pub struct Config {
     pub environment: String,
     #[serde(default = "default_inspect_port")]
     pub inspect_port: u16,
+    /// Websocket URL of the `mpesa-relay` this client should connect to for
+    /// `tunnel`, e.g. `wss://relay.example.com/tunnel/ws`.
+    pub relay_url: Option<String>,
+    /// Shared secret the relay's `RELAY_TOKEN` expects.
+    pub relay_token: Option<String>,
 }
 
 fn default_environment() -> String {
@@ -75,6 +80,12 @@ impl Config {
                 self.inspect_port = port;
             }
         }
+        if let Ok(v) = std::env::var("MPESA_RELAY_URL") {
+            self.relay_url = Some(v);
+        }
+        if let Ok(v) = std::env::var("MPESA_RELAY_TOKEN") {
+            self.relay_token = Some(v);
+        }
     }
 
     /// Base URL for the Daraja API, chosen by `environment` ("sandbox" or
@@ -95,5 +106,17 @@ impl Config {
                     .into(),
             )),
         }
+    }
+
+    pub fn require_relay(&self) -> Result<(String, String)> {
+        let relay_url = self.relay_url.clone().ok_or_else(|| {
+            Error::Config(
+                "missing relay_url; set MPESA_RELAY_URL or relay_url in .mpesa-dev.toml to a \
+                 running mpesa-relay's websocket endpoint, e.g. wss://relay.example.com/tunnel/ws"
+                    .into(),
+            )
+        })?;
+        let relay_token = self.relay_token.clone().unwrap_or_default();
+        Ok((relay_url, relay_token))
     }
 }

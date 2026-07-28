@@ -1,8 +1,8 @@
 # Running mpesa-dev
 
-Status: Milestones 1 (`doctor`) and 2 (`inspect`) are implemented. `tunnel`
-and `replay` are wired up as subcommands but still stubs — each prints what
-it will do and which milestone implements it.
+Status: Milestones 1 (`doctor`), 2 (`inspect`), and 3 (`tunnel`) are
+implemented. `replay` is wired up as a subcommand but still a stub — it
+prints what it will do and which milestone implements it.
 
 ## Prerequisites
 
@@ -45,6 +45,8 @@ applies any `MPESA_*` environment variables on top (env vars always win).
    | `MPESA_CALLBACK_URL`    | `callback_url`        |
    | `MPESA_ENVIRONMENT`     | `environment`         |
    | `MPESA_INSPECT_PORT`    | `inspect_port`        |
+   | `MPESA_RELAY_URL`       | `relay_url`           |
+   | `MPESA_RELAY_TOKEN`     | `relay_token`         |
 
 ## Build and run
 
@@ -65,13 +67,13 @@ cargo build --release
 ```sh
 cargo run -- doctor    # runs sandbox/config checks (Milestone 1 — implemented)
 cargo run -- inspect   # prints live callbacks (Milestone 2 — implemented)
-cargo run -- tunnel    # will expose a public HTTPS URL (Milestone 3 — stub)
+cargo run -- tunnel    # exposes a public HTTPS URL via mpesa-relay (Milestone 3 — implemented)
 cargo run -- replay    # will resend a stored callback (Milestone 4 — stub)
 ```
 
-`tunnel` and `replay` currently print a short description of what they'll
-do once their milestone lands — this confirms the CLI, config loading, and
-subcommand wiring all work end to end.
+`replay` currently prints a short description of what it'll do once its
+milestone lands — this confirms the CLI, config loading, and subcommand
+wiring all work end to end.
 
 ### `doctor`
 
@@ -143,23 +145,102 @@ curl -X POST http://127.0.0.1:4321/callback \
   }'
 ```
 
+### `tunnel`
+
+`tunnel` gives you a public HTTPS URL that forwards to `inspect` on
+localhost, so Safaricom's sandbox can actually reach your machine — no
+ngrok required. It has two halves:
+
+- **`mpesa-relay`** — a small Axum server you deploy once on a cheap VPS.
+  It accepts a websocket connection per `tunnel` client, hands back a
+  public subdomain, and forwards any HTTP request on that subdomain down
+  the socket.
+- **`mpesa-dev tunnel`** — the CLI subcommand. It connects to your relay,
+  prints the public URL it's assigned, and replays every forwarded request
+  against `http://127.0.0.1:{inspect_port}`.
+
+#### Deploying `mpesa-relay`
+
+You need:
+
+- A VPS (any cheap one)
+- A domain with a wildcard DNS record, e.g. `*.tunnel.example.com` → your
+  VPS's IP
+- A TLS-terminating reverse proxy in front, e.g. [Caddy](https://caddyserver.com/),
+  which issues the wildcard cert and forwards plain HTTP to `mpesa-relay`.
+  `mpesa-relay` itself only ever speaks plain HTTP/WS — it never handles
+  TLS directly. A minimal Caddyfile:
+
+  ```
+  *.tunnel.example.com {
+      reverse_proxy 127.0.0.1:7000
+  }
+  ```
+
+Then, on the VPS:
+
+```sh
+cargo build --release --bin mpesa-relay
+RELAY_BIND_ADDR=0.0.0.0:7000 \
+RELAY_TOKEN=$(openssl rand -hex 16) \
+RELAY_PUBLIC_BASE=tunnel.example.com \
+./target/release/mpesa-relay
+```
+
+`RELAY_TOKEN` is the only auth in v1 (per the roadmap: "no auth beyond a
+generated token") — keep it secret and set the same value as `relay_token`
+in every client's config.
+
+#### Running `tunnel`
+
+On your dev machine, configure the relay's websocket URL and token (via
+`.mpesa-dev.toml` or env vars — see the table above), then:
+
+```sh
+cargo run -- tunnel
+```
+
+```
+mpesa-dev tunnel — connecting to wss://relay.example.com/tunnel/ws ...
+Public URL: https://a1b2c3d4.tunnel.example.com
+Paste this as your Daraja callback_url. Forwarding to http://127.0.0.1:4321.
+Press Ctrl+C to stop.
+```
+
+Paste the printed URL into your Daraja app's callback URL field, run
+`inspect` alongside it, and trigger an STK push — the callback lands on
+the relay's public URL, gets forwarded down the websocket, and `tunnel`
+replays it to `inspect` on localhost.
+
+**Verified in this session**: the full chain — relay routing by subdomain
+Host header, websocket forwarding, and local replay — was tested end to
+end locally (relay and client both on `127.0.0.1`, using a synthetic
+`Host: <id>.tunnel.local` header in place of real DNS/TLS, since this
+sandbox has neither). A real Safaricom-sandbox-originated callback still
+needs an actual deployment: a VPS, wildcard DNS, and Caddy in front, none
+of which exist in this environment.
+
 ## Project layout
 
 ```
 src/
-  main.rs             entry point: parses CLI args, loads config, dispatches
+  main.rs             mpesa-dev binary entry point: parses CLI args, loads config, dispatches
+  lib.rs              mpesa-dev library entry point: exposes tunnel_protocol to both binaries
+  tunnel_protocol.rs  shared websocket message types (relay <-> tunnel client)
   cli.rs              clap arg/subcommand definitions
   config.rs           .mpesa-dev.toml + env var loading
   error.rs            shared error type
   commands/
     doctor.rs         Milestone 1 (implemented)
-    inspect.rs         Milestone 2 (implemented)
-    tunnel.rs          Milestone 3 (stub)
-    replay.rs          Milestone 4 (stub)
+    inspect.rs        Milestone 2 (implemented)
+    tunnel.rs         Milestone 3 (implemented) — the CLI half of tunnel
+    replay.rs         Milestone 4 (stub)
   daraja/
     client.rs         OAuth token fetch + in-memory cache, STK push
     models.rs         typed Daraja request/response structs
     result_code.rs    ResultCode -> plain English glossary
+  bin/
+    mpesa-relay.rs    Milestone 3 (implemented) — the relay half of tunnel, deployed separately
 ```
 
 ## Running tests
