@@ -1,3 +1,4 @@
+use colored::Colorize;
 use futures_util::{SinkExt, StreamExt};
 use mpesa_dev::tunnel_protocol::{
     is_forwardable_header, ClientToRelay, ForwardedRequest, ForwardedResponse, RelayToClient,
@@ -9,14 +10,17 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 use crate::config::Config;
 use crate::error::{Error, Result};
+use mpesa_dev::banner::{self, icon};
 
 /// Connects to an `mpesa-relay` over a websocket, prints the public URL it
 /// hands back, and replays every forwarded request against
 /// `http://127.0.0.1:{inspect_port}` — the same port `inspect` listens on.
 pub async fn run(config: &Config) -> Result<()> {
+    banner::header("Tunnel");
+
     let (relay_url, relay_token) = config.require_relay()?;
 
-    println!("mpesa-dev tunnel — connecting to {relay_url} ...");
+    println!("{} Connecting to {relay_url} ...", icon::arrow());
 
     // The token travels as an Authorization header, not a query parameter,
     // so it doesn't end up in reverse-proxy access logs.
@@ -55,9 +59,10 @@ pub async fn run(config: &Config) -> Result<()> {
 
         match relay_message {
             RelayToClient::Connected { public_url } => {
-                println!("Public URL: {public_url}");
-                println!("Paste this as your Daraja callback_url. Forwarding to {local_base}.");
-                println!("Press Ctrl+C to stop.\n");
+                println!("{} Connected", icon::ok());
+                println!("  Public URL: {}", public_url.green().bold());
+                println!("  Paste this as your Daraja callback_url. Forwarding to {local_base}.");
+                println!("  Press Ctrl+C to stop.\n");
             }
             RelayToClient::Forward(request) => {
                 let response = replay_locally(&http, &local_base, &request).await;

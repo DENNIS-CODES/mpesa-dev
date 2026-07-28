@@ -1,3 +1,4 @@
+mod callback_store;
 mod cli;
 mod commands;
 mod config;
@@ -5,6 +6,7 @@ mod daraja;
 mod error;
 
 use clap::Parser;
+use mpesa_dev::banner;
 
 use cli::{Cli, Command};
 use config::Config;
@@ -15,15 +17,19 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::load()?;
 
     match cli.command {
-        Command::Doctor => commands::doctor::run(&config).await?,
-        Command::Inspect => commands::inspect::run(&config).await?,
-        Command::Tunnel => commands::tunnel::run(&config).await?,
-        Command::Replay {
-            file,
+        None => {
+            banner::print_full();
+            commands::inspect::run(&config).await?
+        }
+        Some(Command::Doctor) => commands::doctor::run(&config).await?,
+        Some(Command::Inspect) => commands::inspect::run(&config).await?,
+        Some(Command::Tunnel) => commands::tunnel::run(&config).await?,
+        Some(Command::Replay {
+            selector,
             delay,
             duplicate,
             corrupt,
-        } => commands::replay::run(&config, file, delay, duplicate, corrupt).await?,
+        }) => commands::replay::run(&config, selector, delay, duplicate, corrupt).await?,
     }
 
     Ok(())

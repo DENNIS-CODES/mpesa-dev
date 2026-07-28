@@ -12,25 +12,33 @@ use colored::Colorize;
 use tower::timeout::TimeoutLayer;
 use tower::ServiceBuilder;
 
+use crate::callback_store;
 use crate::config::Config;
 use crate::daraja::models::{CallbackMetadata, StkCallbackEnvelope};
 use crate::daraja::result_code::{self, Outcome};
 use crate::error::Result;
+use mpesa_dev::banner::{self, icon};
 
 /// Starts a local HTTP server that accepts Daraja callbacks on any path and
-/// method, pretty-prints them as they arrive, and decodes ResultCode into
-/// plain English for recognized STK push callbacks.
+/// method, pretty-prints them as they arrive, decodes ResultCode into
+/// plain English for recognized STK push callbacks, and persists each one
+/// to disk so `replay` has something to resend later.
 pub async fn run(config: &Config) -> Result<()> {
+    banner::header("Inspector");
+
     let bind_addr = format!("0.0.0.0:{}", config.inspect_port);
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
 
     println!(
-        "mpesa-dev inspect — listening on http://127.0.0.1:{}",
+        "{} Listening on http://127.0.0.1:{} (bound to {bind_addr})",
+        icon::ok(),
         config.inspect_port
     );
-    println!("(bound to all interfaces at {bind_addr}, for tunnel/relay forwarding)");
-    println!("Point your Daraja callback_url here (via a public tunnel) and trigger an STK push.");
-    println!("Press Ctrl+C to stop.\n");
+    println!(
+        "{} Point your Daraja callback_url here (via a public tunnel) and trigger an STK push",
+        icon::arrow()
+    );
+    println!("  Press Ctrl+C to stop\n");
 
     let app = Router::new().fallback(any(handle_callback)).layer(
         ServiceBuilder::new()
@@ -73,11 +81,11 @@ fn print_callback(addr: SocketAddr, body: &[u8]) {
     let rule = "─".repeat(60);
 
     println!("{}", rule.dimmed());
-    println!("[{now}] callback from {addr}");
+    println!("{} [{now}] callback from {addr}", icon::arrow());
 
     let text = String::from_utf8_lossy(body);
     let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
-        println!("{}", "(not valid JSON)".yellow());
+        println!("{} not valid JSON", icon::warn());
         println!("{text}");
         println!("{}\n", rule.dimmed());
         return;
@@ -88,7 +96,7 @@ fn print_callback(addr: SocketAddr, body: &[u8]) {
         serde_json::to_string_pretty(&value).unwrap_or_else(|_| text.to_string())
     );
 
-    match serde_json::from_value::<StkCallbackEnvelope>(value) {
+    match serde_json::from_value::<StkCallbackEnvelope>(value.clone()) {
         Ok(envelope) => {
             let callback = envelope.body.stk_callback;
             let (outcome, description) = result_code::describe(callback.result_code);
@@ -96,8 +104,8 @@ fn print_callback(addr: SocketAddr, body: &[u8]) {
             println!();
             println!("CheckoutRequestID: {}", callback.checkout_request_id);
             match outcome {
-                Outcome::Success => println!("{}", line.green().bold()),
-                Outcome::Failure => println!("{}", line.red().bold()),
+                Outcome::Success => println!("{} {}", icon::ok(), line.green().bold()),
+                Outcome::Failure => println!("{} {}", icon::fail(), line.red().bold()),
             }
             println!("  Daraja says: {}", callback.result_desc);
             if let Some(metadata) = &callback.callback_metadata {
@@ -106,8 +114,13 @@ fn print_callback(addr: SocketAddr, body: &[u8]) {
         }
         Err(_) => {
             println!();
-            println!("{}", "(not a recognized STK push callback shape)".dimmed());
+            println!("{} not a recognized STK push callback shape", icon::warn());
         }
+    }
+
+    match callback_store::save(&value) {
+        Ok(path) => println!("  {} saved to {}", icon::arrow(), path.display()),
+        Err(e) => println!("  {} failed to save callback: {e}", icon::warn()),
     }
 
     println!("{}\n", rule.dimmed());

@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::daraja::models::StkPushRequest;
 use crate::daraja::DarajaClient;
 use crate::error::Result;
+use mpesa_dev::banner::{self, icon};
 
 /// Well-known Daraja sandbox test MSISDN, safe to use for STK push checks —
 /// see https://developer.safaricom.co.ke/Documentation.
@@ -63,25 +64,23 @@ impl CheckResult {
     }
 
     fn print(&self) {
-        let label = match self.status {
-            Status::Pass => "PASS".green().bold(),
-            Status::Warn => "WARN".yellow().bold(),
-            Status::Fail => "FAIL".red().bold(),
-            Status::Skip => "SKIP".dimmed(),
+        let icon = match self.status {
+            Status::Pass => icon::ok(),
+            Status::Warn => icon::warn(),
+            Status::Fail => icon::fail(),
+            Status::Skip => icon::skip(),
         };
-        println!("[{label}] {}", self.name.bold());
-        println!("       {}", self.detail);
+        println!("{icon} {}", self.name.bold());
+        println!("  {}", self.detail.dimmed());
         if let Some(fix) = &self.fix {
-            println!("       {} {}", "fix:".yellow(), fix);
+            println!("  {} {}", icon::arrow(), fix);
         }
     }
 }
 
 pub async fn run(config: &Config) -> Result<()> {
-    println!(
-        "mpesa-dev doctor — checking your Daraja {} setup\n",
-        config.environment
-    );
+    banner::header("Doctor");
+    println!("Checking your Daraja {} setup\n", config.environment.bold());
 
     let mut results = Vec::new();
 
@@ -130,7 +129,12 @@ pub async fn run(config: &Config) -> Result<()> {
         .iter()
         .filter(|r| matches!(r.status, Status::Pass))
         .count();
-    println!("{passed}/{} checks passed", results.len());
+    let summary = format!("{passed}/{} checks passed", results.len());
+    if failed > 0 {
+        println!("{} {}", icon::fail(), summary.bold());
+    } else {
+        println!("{} {}", icon::ok(), summary.bold());
+    }
 
     if failed > 0 {
         std::process::exit(1);
