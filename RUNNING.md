@@ -117,9 +117,10 @@ cargo run -- replay      # resend a stored callback
 
 ### `doctor`
 
-Runs seven checks, in order, and prints a colored PASS/WARN/FAIL/SKIP line
-for each with a one-sentence fix on failure. Exits non-zero if any check
-fails.
+Runs seven checks, in order, each with a live "doing this now" line, a
+✓/✗/⚠/○ result with its timing, and a one-sentence fix on failure. Ends
+with a summary (pass count, environment, total time). Exits non-zero if
+any check fails.
 
 ```sh
 cargo run -- doctor
@@ -136,27 +137,45 @@ cargo run -- doctor
 | HTTPS cert validity | Confirms the TLS handshake to `callback_url` succeeded (skipped/warned if not HTTPS) |
 
 Checks that need config you haven't set (e.g. no `callback_url`, or no
-`shortcode`/`passkey`) print `SKIP` instead of failing.
+`shortcode`/`passkey`) print `○` (skip) instead of failing. A non-2xx
+status on the two reachability checks (sandbox, callback URL) is not a
+failure — the detail text says so explicitly, since these only confirm
+the network path works, not that the exact route serves anything.
 
-Example failure output (deliberately wrong credentials):
+Example output (one real failure — a wrong passkey):
 
 ```
-[FAIL] OAuth round trip
-       Daraja returned an error response: HTTP 400 Bad Request: (empty response body)
-       fix: double check your consumer key/secret are copied correctly from an active Daraja app
+Authenticating with Daraja...
+✓ OAuth round trip (612ms)
+  token issued from https://sandbox.safaricom.co.ke
+
+Submitting a test STK push...
+✗ passkey / STK push credentials (398ms)
+  Daraja returned an error response: HTTP 500 Internal Server Error: 500.001.1001: Merchant does not exist
+  → verify the passkey matches shortcode 174379 in the Daraja portal
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Summary
+  Checks       6/7 passed
+  Environment  sandbox
+  Total time   2143ms
+
+  ✗ 1 check needs attention — see the ✗ above for the fix.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ### `inspect`
 
 Starts a local HTTP server (default port `4321`, override with
 `MPESA_INSPECT_PORT` or `inspect_port`) that accepts a callback on any path
-or method, pretty-prints the JSON as it arrives, and decodes `ResultCode`
-into plain English using a static glossary (`src/daraja/result_code.rs`)
-compiled from the Daraja docs and real callback samples — cancellation,
-timeout, wrong PIN, insufficient funds, etc. For a recognized STK push
-callback it also prints the `CheckoutRequestID`, Daraja's own `ResultDesc`,
-and — on success — the amount, receipt number, and phone number from
-`CallbackMetadata`.
+or method. Opens with a small dashboard block, then prints an "Incoming
+STK Callback" card for each one that arrives — status, amount, receipt,
+and a masked phone number for recognized STK callbacks, decoded via a
+static ResultCode glossary (`src/daraja/result_code.rs`) compiled from the
+Daraja docs and real callback samples. The full raw JSON is still printed
+underneath (dimmed) for anyone who wants it. A running tally
+(payments/callbacks/errors) prints after every event, and each one is
+persisted to `callbacks/` for `replay`.
 
 ```sh
 cargo run -- inspect
@@ -164,11 +183,10 @@ cargo run -- inspect
 
 To see a real callback, point a Daraja `callback_url` at wherever this
 server is reachable and trigger an STK push (`doctor` does this for you as
-part of its passkey check). **Until `tunnel` (Milestone 3) lands, this only
-works if `inspect_port` is reachable from the public internet** — e.g. via
-your own reverse proxy or an ngrok-style tool — since Safaricom's sandbox
-can't reach `localhost` directly. In the meantime you can verify the server
-itself with a synthetic callback matching Daraja's documented shape:
+part of its passkey check) — either via `tunnel` (below) or your own
+ngrok-style tool, since Safaricom's sandbox can't reach `localhost`
+directly. In the meantime you can verify the server itself with a
+synthetic callback matching Daraja's documented shape:
 
 ```sh
 curl -X POST http://127.0.0.1:4321/callback \
@@ -178,11 +196,33 @@ curl -X POST http://127.0.0.1:4321/callback \
       "stkCallback": {
         "MerchantRequestID": "29115-34620561-1",
         "CheckoutRequestID": "ws_CO_191220191020363925",
-        "ResultCode": 1032,
-        "ResultDesc": "Request cancelled by user"
+        "ResultCode": 0,
+        "ResultDesc": "The service request is processed successfully.",
+        "CallbackMetadata": {
+          "Item": [
+            {"Name": "Amount", "Value": 500},
+            {"Name": "MpesaReceiptNumber", "Value": "ABC123"},
+            {"Name": "PhoneNumber", "Value": 254712345678}
+          ]
+        }
       }
     }
   }'
+```
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+→ Incoming STK Callback  19:52:37
+  Status        SUCCESS
+  Amount        KES 500
+  Receipt       ABC123
+  Phone         254712••••78
+  CheckoutRequestID  ws_CO_191220191020363925
+
+{ ...raw JSON, dimmed... }
+  → saved to callbacks/20260728-195237_rc0_6fifpjvq.json
+  Totals so far: 1 payment · 1 callback · 0 errors
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ### `tunnel`

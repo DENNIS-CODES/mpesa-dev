@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use colored::Colorize;
@@ -24,6 +26,7 @@ struct CheckResult {
     status: Status,
     detail: String,
     fix: Option<String>,
+    duration: Duration,
 }
 
 impl CheckResult {
@@ -33,6 +36,7 @@ impl CheckResult {
             status: Status::Pass,
             detail: detail.into(),
             fix: None,
+            duration: Duration::ZERO,
         }
     }
 
@@ -42,6 +46,7 @@ impl CheckResult {
             status: Status::Warn,
             detail: detail.into(),
             fix: Some(fix.into()),
+            duration: Duration::ZERO,
         }
     }
 
@@ -51,6 +56,7 @@ impl CheckResult {
             status: Status::Fail,
             detail: detail.into(),
             fix: Some(fix.into()),
+            duration: Duration::ZERO,
         }
     }
 
@@ -60,7 +66,13 @@ impl CheckResult {
             status: Status::Skip,
             detail: detail.into(),
             fix: None,
+            duration: Duration::ZERO,
         }
+    }
+
+    fn with_duration(mut self, duration: Duration) -> Self {
+        self.duration = duration;
+        self
     }
 
     fn print(&self) {
@@ -70,7 +82,8 @@ impl CheckResult {
             Status::Fail => icon::fail(),
             Status::Skip => icon::skip(),
         };
-        println!("{icon} {}", self.name.bold());
+        let millis = format!("({}ms)", self.duration.as_millis());
+        println!("{icon} {} {}", self.name.bold(), millis.dimmed());
         println!("  {}", self.detail.dimmed());
         if let Some(fix) = &self.fix {
             println!("  {} {}", icon::arrow(), fix);
@@ -78,15 +91,32 @@ impl CheckResult {
     }
 }
 
+/// Phrases an HTTP reachability result so a non-2xx status doesn't read as
+/// a failure: these checks only confirm the network path works, not that
+/// the exact route serves anything.
+fn reachability_detail(url: &str, status: reqwest::StatusCode) -> String {
+    if status.is_success() {
+        format!("{url} responded successfully (HTTP {status})")
+    } else {
+        format!(
+            "{url} is reachable — HTTP {status} (a non-2xx status is fine here; \
+             this only confirms the network path works, not that this exact route exists)"
+        )
+    }
+}
+
 pub async fn run(config: &Config) -> Result<()> {
     banner::header("Doctor");
     println!("Checking your Daraja {} setup\n", config.environment.bold());
 
+    let overall_start = Instant::now();
     let mut results = Vec::new();
 
     // 1. Credentials configured
+    println!("{}", "Checking credentials...".dimmed());
+    let start = Instant::now();
     let creds = config.require_credentials();
-    results.push(match &creds {
+    let result = match &creds {
         Ok(_) => CheckResult::pass("consumer key/secret configured", "found in config/env"),
         Err(e) => CheckResult::fail(
             "consumer key/secret configured",
@@ -94,32 +124,63 @@ pub async fn run(config: &Config) -> Result<()> {
             "run `cp .mpesa-dev.toml.example .mpesa-dev.toml` and fill in your Daraja app's \
              consumer key/secret, or set MPESA_CONSUMER_KEY / MPESA_CONSUMER_SECRET",
         ),
-    });
+    }
+    .with_duration(start.elapsed());
+    result.print();
+    println!();
+    results.push(result);
     let client = creds
         .ok()
         .map(|(key, secret)| DarajaClient::new(config.base_url(), key, secret));
 
     // 2 & 3. Sandbox reachability + clock skew (share one plain HTTP request)
+    println!("{}", "Pinging Safaricom sandbox...".dimmed());
+    let start = Instant::now();
     let (reachability, skew) = check_reachability_and_clock(config.base_url()).await;
+    let elapsed = start.elapsed();
+    let (reachability, skew) = (
+        reachability.with_duration(elapsed),
+        skew.with_duration(elapsed),
+    );
+    reachability.print();
+    println!();
+    skew.print();
+    println!();
     results.push(reachability);
     results.push(skew);
 
     // 4. OAuth round trip
-    results.push(check_oauth(client.as_ref(), config.base_url()).await);
+    println!("{}", "Authenticating with Daraja...".dimmed());
+    let start = Instant::now();
+    let result = check_oauth(client.as_ref(), config.base_url())
+        .await
+        .with_duration(start.elapsed());
+    result.print();
+    println!();
+    results.push(result);
 
     // 5. Passkey / STK push credentials
-    results.push(check_stk_push(client.as_ref(), config).await);
+    println!("{}", "Submitting a test STK push...".dimmed());
+    let start = Instant::now();
+    let result = check_stk_push(client.as_ref(), config)
+        .await
+        .with_duration(start.elapsed());
+    result.print();
+    println!();
+    results.push(result);
 
     // 6 & 7. Callback URL reachability + HTTPS cert validity
+    println!("{}", "Verifying your callback URL...".dimmed());
+    let start = Instant::now();
     let (callback, cert) = check_callback(config.callback_url.as_deref()).await;
+    let elapsed = start.elapsed();
+    let (callback, cert) = (callback.with_duration(elapsed), cert.with_duration(elapsed));
+    callback.print();
+    println!();
+    cert.print();
+    println!();
     results.push(callback);
     results.push(cert);
-
-    println!();
-    for result in &results {
-        result.print();
-        println!();
-    }
 
     let failed = results
         .iter()
@@ -129,12 +190,34 @@ pub async fn run(config: &Config) -> Result<()> {
         .iter()
         .filter(|r| matches!(r.status, Status::Pass))
         .count();
-    let summary = format!("{passed}/{} checks passed", results.len());
+    let total = results.len();
+    let total_time = overall_start.elapsed();
+
+    let rule = "━".repeat(56);
+    println!("{}", rule.dimmed());
+    println!("  {}", "Summary".bold());
+    println!("  Checks       {passed}/{total} passed");
+    println!("  Environment  {}", config.environment);
+    println!("  Total time   {}ms", total_time.as_millis());
+    println!();
     if failed > 0 {
-        println!("{} {}", icon::fail(), summary.bold());
+        let (noun, verb) = if failed == 1 {
+            ("check", "needs")
+        } else {
+            ("checks", "need")
+        };
+        println!(
+            "  {} {failed} {noun} {verb} attention — see the {} above for the fix.",
+            icon::fail(),
+            icon::fail()
+        );
     } else {
-        println!("{} {}", icon::ok(), summary.bold());
+        println!(
+            "  {} Everything looks healthy. Ready to develop.",
+            icon::ok()
+        );
     }
+    println!("{}", rule.dimmed());
 
     if failed > 0 {
         std::process::exit(1);
@@ -159,7 +242,7 @@ async fn check_reachability_and_clock(base_url: &str) -> (CheckResult, CheckResu
 
     let reachability = CheckResult::pass(
         "sandbox reachability",
-        format!("connected to {base_url} (HTTP {})", response.status()),
+        reachability_detail(base_url, response.status()),
     );
 
     let skew = match response
@@ -284,7 +367,7 @@ async fn check_callback(callback_url: Option<&str>) -> (CheckResult, CheckResult
     let reachability = match &response {
         Ok(r) => CheckResult::pass(
             "callback URL reachability",
-            format!("connected to {url} (HTTP {})", r.status()),
+            reachability_detail(url, r.status()),
         ),
         Err(e) => CheckResult::fail(
             "callback URL reachability",
