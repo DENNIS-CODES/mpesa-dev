@@ -56,15 +56,14 @@ Environment: sandbox
 # curl install script (Linux/macOS, downloads a prebuilt binary — fastest)
 curl -fsSL https://raw.githubusercontent.com/DENNIS-CODES/mpesa-dev/main/scripts/install.sh | sh
 
-# cargo install (from source — needs Rust, works on any platform Rust supports)
-git clone https://github.com/DENNIS-CODES/mpesa-dev && cd mpesa-dev
-cargo install --path . --bin mpesa-dev
+# cargo install (published on crates.io — needs Rust, works on any platform Rust supports)
+cargo install mpesa-dev
 
 # Homebrew (once the tap is published — see packaging/homebrew/)
 brew tap DENNIS-CODES/tap && brew install mpesa-dev
 ```
 
-New to Rust or unsure which to pick? Use the curl script — it just downloads a ready-to-run binary, nothing to compile. See [RUNNING.md](RUNNING.md#packaging--installing) for details on each path.
+New to Rust or unsure which to pick? Use the curl script — it just downloads a ready-to-run binary, nothing to compile. `cargo install mpesa-dev` pulls the [crates.io package](https://crates.io/crates/mpesa-dev) and builds both `mpesa-dev` and `mpesa-relay` locally. See [RUNNING.md](RUNNING.md#packaging--installing) for details on each path.
 
 ## Using it
 
