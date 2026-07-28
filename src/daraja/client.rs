@@ -1,7 +1,3 @@
-// Wired into the `doctor` (Milestone 1) and `inspect` (Milestone 2) commands;
-// not yet called from the CLI, hence the otherwise-unused warnings.
-#![allow(dead_code)]
-
 use std::sync::Mutex;
 
 use chrono::{DateTime, Duration, Utc};
@@ -117,38 +113,19 @@ impl DarajaClient {
         Ok(response.json().await?)
     }
 
-    /// Returns the `Date` response header from a lightweight authenticated
-    /// call, used by `doctor` to measure clock skew against Safaricom's
-    /// server time.
-    pub async fn server_date_header(&self) -> Result<String> {
-        let url = format!(
-            "{}/oauth/v1/generate?grant_type=client_credentials",
-            self.base_url
-        );
-        let response = self
-            .http
-            .get(&url)
-            .basic_auth(&self.consumer_key, Some(&self.consumer_secret))
-            .send()
-            .await?;
-
-        response
-            .headers()
-            .get(reqwest::header::DATE)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_string)
-            .ok_or_else(|| Error::Api("Daraja response had no Date header".into()))
-    }
-
     async fn ensure_success(response: reqwest::Response) -> Result<reqwest::Response> {
         if response.status() == StatusCode::OK {
             return Ok(response);
         }
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        let message = serde_json::from_str::<DarajaErrorResponse>(&body)
-            .map(|err| err.description())
-            .unwrap_or(body);
+        let message = if body.trim().is_empty() {
+            "(empty response body)".to_string()
+        } else {
+            serde_json::from_str::<DarajaErrorResponse>(&body)
+                .map(|err| err.description())
+                .unwrap_or(body)
+        };
         Err(Error::Api(format!("HTTP {status}: {message}")))
     }
 }

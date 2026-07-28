@@ -1,8 +1,8 @@
 # Running mpesa-dev
 
-Status: Milestone 0 (foundations) scaffolding. `doctor`, `inspect`, `tunnel`,
-and `replay` are wired up as subcommands but not yet implemented — each
-prints what it will do and which milestone implements it.
+Status: Milestone 1 (`doctor`) is implemented. `inspect`, `tunnel`, and
+`replay` are wired up as subcommands but still stubs — each prints what it
+will do and which milestone implements it.
 
 ## Prerequisites
 
@@ -60,32 +60,49 @@ cargo build --release
 ./target/release/mpesa-dev --help
 ```
 
-### Commands (current scaffolding)
+### Commands
 
 ```sh
-cargo run -- doctor    # will run sandbox/config checks (Milestone 1)
-cargo run -- inspect   # will print live callbacks (Milestone 2)
-cargo run -- tunnel    # will expose a public HTTPS URL (Milestone 3)
-cargo run -- replay    # will resend a stored callback (Milestone 4)
+cargo run -- doctor    # runs sandbox/config checks (Milestone 1 — implemented)
+cargo run -- inspect   # will print live callbacks (Milestone 2 — stub)
+cargo run -- tunnel    # will expose a public HTTPS URL (Milestone 3 — stub)
+cargo run -- replay    # will resend a stored callback (Milestone 4 — stub)
 ```
 
-Each currently prints a short description of what it will do once its
-milestone lands — this confirms the CLI, config loading, and subcommand
-wiring all work end to end.
+`inspect`, `tunnel`, and `replay` currently print a short description of
+what they'll do once their milestone lands — this confirms the CLI, config
+loading, and subcommand wiring all work end to end.
 
-### Verifying the Daraja client manually
+### `doctor`
 
-The OAuth client (`src/daraja/client.rs`) isn't wired into a command yet —
-that happens in Milestone 1's `doctor`. To sanity-check it against your own
-sandbox credentials before then, add a temporary call in `main.rs`, e.g.:
+Runs seven checks, in order, and prints a colored PASS/WARN/FAIL/SKIP line
+for each with a one-sentence fix on failure. Exits non-zero if any check
+fails.
 
-```rust
-let client = daraja::DarajaClient::new(config.base_url(), consumer_key, consumer_secret);
-println!("{}", client.fetch_access_token().await?);
+```sh
+cargo run -- doctor
 ```
 
-A successful run prints a bearer token string. Remove the snippet afterward
-— `doctor` will make this a proper, permanent check.
+| Check | What it does |
+|-------|---------------|
+| consumer key/secret configured | Confirms `consumer_key`/`consumer_secret` are set |
+| sandbox reachability | Plain HTTPS request to the Daraja base URL |
+| clock skew | Compares your system clock to the `Date` header from that request; fails past ±30s, warns past ±5s |
+| OAuth round trip | Fetches a real access token via `/oauth/v1/generate` |
+| passkey / STK push credentials | Submits a real STK push to the sandbox test MSISDN (`254708374149`) using your `shortcode`/`passkey`; catches a wrong passkey since Daraja rejects the derived password synchronously |
+| callback URL reachability | HTTP request to `callback_url`, if configured |
+| HTTPS cert validity | Confirms the TLS handshake to `callback_url` succeeded (skipped/warned if not HTTPS) |
+
+Checks that need config you haven't set (e.g. no `callback_url`, or no
+`shortcode`/`passkey`) print `SKIP` instead of failing.
+
+Example failure output (deliberately wrong credentials):
+
+```
+[FAIL] OAuth round trip
+       Daraja returned an error response: HTTP 400 Bad Request: (empty response body)
+       fix: double check your consumer key/secret are copied correctly from an active Daraja app
+```
 
 ## Project layout
 
@@ -96,7 +113,7 @@ src/
   config.rs           .mpesa-dev.toml + env var loading
   error.rs            shared error type
   commands/
-    doctor.rs         Milestone 1 (stub)
+    doctor.rs         Milestone 1 (implemented)
     inspect.rs         Milestone 2 (stub)
     tunnel.rs          Milestone 3 (stub)
     replay.rs          Milestone 4 (stub)

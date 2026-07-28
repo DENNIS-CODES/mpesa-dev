@@ -79,7 +79,6 @@ impl Config {
 
     /// Base URL for the Daraja API, chosen by `environment` ("sandbox" or
     /// "production"). Anything other than "production" is treated as sandbox.
-    #[allow(dead_code)] // wired into the `doctor` command in Milestone 1
     pub fn base_url(&self) -> &'static str {
         match self.environment.as_str() {
             "production" => "https://api.safaricom.co.ke",
@@ -87,7 +86,6 @@ impl Config {
         }
     }
 
-    #[allow(dead_code)] // wired into the `doctor` command in Milestone 1
     pub fn require_credentials(&self) -> Result<(String, String)> {
         match (&self.consumer_key, &self.consumer_secret) {
             (Some(key), Some(secret)) => Ok((key.clone(), secret.clone())),
