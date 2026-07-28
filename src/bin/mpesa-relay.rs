@@ -66,6 +66,17 @@ async fn main() {
         std::process::exit(1);
     });
 
+    let port = bind_addr
+        .rsplit(':')
+        .next()
+        .unwrap_or(&bind_addr)
+        .to_string();
+    println!("mpesa-relay bound to {bind_addr}");
+    println!(
+        "tunnel clients connect to: wss://{public_base}/tunnel/ws (behind a TLS-terminating proxy)"
+    );
+    println!("for local testing without a proxy: ws://127.0.0.1:{port}/tunnel/ws");
+
     let state = AppState {
         token,
         public_base,
@@ -77,7 +88,6 @@ async fn main() {
         .fallback(any(http_handler))
         .with_state(state);
 
-    println!("mpesa-relay listening on {bind_addr}");
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .unwrap_or_else(|e| panic!("failed to bind {bind_addr}: {e}"));

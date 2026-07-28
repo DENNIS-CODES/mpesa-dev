@@ -62,6 +62,46 @@ cargo build --release
 ./target/release/mpesa-dev --help
 ```
 
+### Installing with `cargo install`
+
+This crate builds two binaries: `mpesa-dev` (the CLI) and `mpesa-relay`
+(the tunnel relay, normally deployed on a VPS instead of your dev
+machine). To install `mpesa-dev` onto your `PATH`, run `cargo install`
+**from inside this directory** (the one containing `Cargo.toml`) with an
+explicit path — don't run bare `cargo install` with no arguments:
+
+```sh
+cargo install --path . --bin mpesa-dev
+```
+
+Drop `--bin mpesa-dev` if you also want `mpesa-relay` installed locally
+(e.g. to test the relay on your own machine before deploying it).
+
+If you instead see an error like:
+
+```
+error: failed to parse manifest at `C:\Users\you\Desktop\Cargo.toml`
+Caused by:
+  no targets specified in the manifest
+```
+
+note that the path in the error is **not** inside `mpesa-dev` — here it's
+`Desktop\Cargo.toml`, one level up. That means Cargo found and tried to use
+a *different*, unrelated (and empty) `Cargo.toml` sitting in a parent
+folder, not this project's. This happens when:
+
+- there's a stray `Cargo.toml` directly in a parent directory (e.g. from an
+  earlier `cargo new`/`cargo init` run in the wrong place), or
+- the checkout is incomplete and this project's own `Cargo.toml` isn't
+  actually present in the folder you think you're in.
+
+Run `dir Cargo.toml` (or `ls Cargo.toml` on macOS/Linux) in the directory
+you're in to confirm this project's manifest is really there, and remove
+or rename any unrelated `Cargo.toml` in a parent folder if you don't need
+it. Using `cargo install --path .` as shown above also sidesteps the
+ambiguity, since it always targets the manifest in the given path rather
+than whatever Cargo discovers by walking upward.
+
 ### Commands
 
 ```sh
