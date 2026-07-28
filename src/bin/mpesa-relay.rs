@@ -18,19 +18,18 @@ use std::time::Duration;
 
 use axum::body::{Body, Bytes};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Query, State};
-use axum::http::header::HOST;
+use axum::extract::State;
+use axum::http::header::{AUTHORIZATION, HOST};
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
 use axum::Router;
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
-use serde::Deserialize;
 use tokio::sync::{mpsc, oneshot};
 
 use mpesa_dev::tunnel_protocol::{
-    ClientToRelay, ForwardedRequest, ForwardedResponse, RelayToClient,
+    is_forwardable_header, ClientToRelay, ForwardedRequest, ForwardedResponse, RelayToClient,
 };
 
 const FORWARD_TIMEOUT: Duration = Duration::from_secs(15);
@@ -96,18 +95,18 @@ async fn main() {
         .expect("relay server error");
 }
 
-#[derive(Deserialize)]
-struct ConnectParams {
-    token: String,
-}
-
 async fn ws_handler(
-    Query(params): Query<ConnectParams>,
     State(state): State<AppState>,
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
-    if params.token != state.token {
-        return (StatusCode::UNAUTHORIZED, "invalid token").into_response();
+    let provided = headers
+        .get(AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "));
+
+    if provided != Some(state.token.as_str()) {
+        return (StatusCode::UNAUTHORIZED, "invalid or missing token").into_response();
     }
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
@@ -197,7 +196,7 @@ async fn http_handler(
             .unwrap_or_else(|| "/".to_string()),
         headers: headers
             .iter()
-            .filter(|(name, _)| **name != HOST)
+            .filter(|(name, _)| is_forwardable_header(name.as_str()))
             .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.to_string(), v.to_string())))
             .collect(),
         body: String::from_utf8_lossy(&body).into_owned(),
@@ -215,7 +214,11 @@ async fn http_handler(
     match tokio::time::timeout(FORWARD_TIMEOUT, resp_rx).await {
         Ok(Ok(response)) => {
             let mut builder = Response::builder().status(response.status);
-            for (k, v) in &response.headers {
+            for (k, v) in response
+                .headers
+                .iter()
+                .filter(|(k, _)| is_forwardable_header(k))
+            {
                 builder = builder.header(k, v);
             }
             builder.body(Body::from(response.body)).unwrap_or_else(|_| {

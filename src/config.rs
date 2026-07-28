@@ -116,7 +116,13 @@ impl Config {
                     .into(),
             )
         })?;
-        let relay_token = self.relay_token.clone().unwrap_or_default();
+        let relay_token = self.relay_token.clone().ok_or_else(|| {
+            Error::Config(
+                "missing relay_token; set MPESA_RELAY_TOKEN or relay_token in .mpesa-dev.toml to \
+                 the same shared secret the relay was started with (RELAY_TOKEN)"
+                    .into(),
+            )
+        })?;
         Ok((relay_url, relay_token))
     }
 }

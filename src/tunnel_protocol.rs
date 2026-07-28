@@ -1,5 +1,28 @@
 use serde::{Deserialize, Serialize};
 
+/// Header names that must never be replayed across a proxy hop: the
+/// RFC 7230 §6.1 hop-by-hop set, plus `host` since it names the wrong
+/// destination on the other side of the tunnel. Checked case-insensitively.
+const NON_FORWARDABLE_HEADERS: &[&str] = &[
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+];
+
+/// Whether `name` is a header that should be dropped rather than forwarded
+/// when replaying a request or response across the tunnel.
+pub fn is_forwardable_header(name: &str) -> bool {
+    !NON_FORWARDABLE_HEADERS
+        .iter()
+        .any(|h| h.eq_ignore_ascii_case(name))
+}
+
 /// Messages the relay sends down the websocket to the `tunnel` CLI client.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]

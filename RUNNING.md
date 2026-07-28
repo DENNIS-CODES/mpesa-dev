@@ -229,7 +229,9 @@ RELAY_PUBLIC_BASE=tunnel.example.com \
 
 `RELAY_TOKEN` is the only auth in v1 (per the roadmap: "no auth beyond a
 generated token") — keep it secret and set the same value as `relay_token`
-in every client's config.
+in every client's config. The token travels as an `Authorization: Bearer`
+header on the websocket handshake, not a query parameter, so it won't end
+up in a reverse proxy's access logs.
 
 #### Running `tunnel`
 
