@@ -1,0 +1,21 @@
+# Copy this file to `.mpesa-dev.toml` in your project root and fill in your
+# Daraja sandbox credentials, or set the equivalent MPESA_* env vars instead.
+# Env vars always take precedence over this file.
+
+# From your Daraja app on https://developer.safaricom.co.ke/
+consumer_key = "your-consumer-key"
+consumer_secret = "your-consumer-secret"
+
+# Test paybill/till number and its Lipa na M-Pesa Online passkey.
+shortcode = "174379"
+passkey = "your-lipa-na-mpesa-passkey"
+
+# Where `inspect`/`tunnel` should tell Daraja to send callbacks. Leave unset
+# until you have a public URL (either from `tunnel` or your own reverse proxy).
+# callback_url = "https://example.com/callback"
+
+# "sandbox" (default) or "production"
+environment = "sandbox"
+
+# Local port `inspect` listens on for incoming callbacks
+inspect_port = 4321
