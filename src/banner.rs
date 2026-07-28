@@ -42,7 +42,11 @@ fn gradient_color(t: f32) -> (u8, u8, u8) {
 /// guide — so the one moment a user sees this, it also teaches them
 /// what's here. Shown once, only when `mpesa-dev` is run with no
 /// subcommand.
-pub fn print_full(environment: &str) {
+///
+/// `subcommands` is the (name, about) list for the guide — pass it in
+/// from clap's own metadata (see `Cli::command()` in `main.rs`) rather
+/// than hard-coding it here, so it can't drift out of sync with `--help`.
+pub fn print_full(environment: &str, subcommands: &[(String, String)]) {
     let rule = "·".repeat(RULE_WIDTH).dimmed();
 
     println!("{rule}");
@@ -75,26 +79,23 @@ pub fn print_full(environment: &str) {
     }
     println!();
 
-    print_command_guide();
+    print_command_guide(subcommands);
 
     println!();
     println!("{rule}");
     println!();
 }
 
-fn print_command_guide() {
-    let entries: [(&str, &str, Option<&str>); 4] = [
-        ("doctor", "diagnose your Daraja setup", None),
-        ("inspect", "watch callbacks live", Some("starting now")),
-        ("tunnel", "get a public HTTPS URL, no ngrok", None),
-        ("replay", "resend a captured callback", None),
-    ];
-
-    for (name, description, note) in entries {
+fn print_command_guide(subcommands: &[(String, String)]) {
+    for (name, description) in subcommands {
         let padded = format!("{name:<8}");
-        let note = note
-            .map(|n| format!("  {}", format!("← {n}").green()))
-            .unwrap_or_default();
+        // `inspect` is what actually runs next after this banner — call
+        // that out using the same arrow/pointer icon as everywhere else.
+        let note = if name == "inspect" {
+            format!("  {} {}", icon::arrow(), "starting now".green())
+        } else {
+            String::new()
+        };
         println!("  {}{}{}", padded.cyan().bold(), description.dimmed(), note);
     }
 }
