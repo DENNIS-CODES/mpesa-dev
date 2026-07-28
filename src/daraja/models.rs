@@ -1,7 +1,3 @@
-// Wired into the `doctor` (Milestone 1) and `inspect` (Milestone 2) commands;
-// not yet called from the CLI, hence the otherwise-unused warnings.
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 
 /// Response body from `GET /oauth/v1/generate?grant_type=client_credentials`.
@@ -17,6 +13,9 @@ pub struct OAuthTokenResponse {
 /// Error body Daraja returns on most non-2xx responses.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DarajaErrorResponse {
+    /// Not surfaced anywhere yet, but useful when filing a support ticket
+    /// with Safaricom, so kept on the struct even though nothing reads it.
+    #[allow(dead_code)]
     #[serde(rename = "requestId")]
     pub request_id: Option<String>,
     #[serde(rename = "errorCode")]
@@ -68,6 +67,9 @@ pub struct StkPushRequest {
 /// result arrives later as an asynchronous callback (see `inspect`).
 #[derive(Debug, Clone, Deserialize)]
 pub struct StkPushResponse {
+    /// Kept on the struct to match the real API shape; `replay` (Milestone 4)
+    /// will need it to correlate a stored callback back to its push request.
+    #[allow(dead_code)]
     #[serde(rename = "MerchantRequestID")]
     pub merchant_request_id: String,
     #[serde(rename = "CheckoutRequestID")]
@@ -76,6 +78,7 @@ pub struct StkPushResponse {
     pub response_code: String,
     #[serde(rename = "ResponseDescription")]
     pub response_description: String,
+    #[allow(dead_code)]
     #[serde(rename = "CustomerMessage")]
     pub customer_message: String,
 }

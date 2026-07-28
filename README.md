@@ -4,8 +4,7 @@ A single-binary CLI for M-Pesa Daraja local development. Diagnose config, inspec
 
 ## Status
 
-Milestone 0 (foundations): CLI skeleton, config loading, and the Daraja
-OAuth client are scaffolded. `doctor`, `inspect`, `tunnel`, and `replay` are
+Milestone 1 (`doctor`) is implemented. `inspect`, `tunnel`, and `replay` are
 wired up as subcommands but not yet implemented.
 
 ## Quick start
@@ -21,9 +20,9 @@ details.
 
 ## Commands
 
-| Command   | Milestone | Purpose |
-|-----------|-----------|---------|
-| `doctor`  | 1         | Sequential sandbox/config checks (OAuth round trip, callback reachability, clock skew, ...) with pass/fail and suggested fixes |
-| `inspect` | 2         | Local server that prints incoming Daraja callbacks live, decoding ResultCode into plain English |
-| `tunnel`  | 3         | Public HTTPS URL for your local callback endpoint, no ngrok required |
-| `replay`  | 4         | Resend a stored callback, with delay/duplicate/corrupt options |
+| Command   | Milestone | Status | Purpose |
+|-----------|-----------|--------|---------|
+| `doctor`  | 1         | done   | Sequential sandbox/config checks (credentials, OAuth round trip, passkey/STK push, callback reachability, HTTPS cert, clock skew) with pass/fail/warn and suggested fixes |
+| `inspect` | 2         | stub   | Local server that prints incoming Daraja callbacks live, decoding ResultCode into plain English |
+| `tunnel`  | 3         | stub   | Public HTTPS URL for your local callback endpoint, no ngrok required |
+| `replay`  | 4         | stub   | Resend a stored callback, with delay/duplicate/corrupt options |

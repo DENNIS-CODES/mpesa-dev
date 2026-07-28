@@ -1,8 +1,5 @@
 use thiserror::Error;
 
-// `Config` and `Api` are raised by config.rs/daraja::client, which are only
-// wired into the `doctor` (Milestone 1) command so far.
-#[allow(dead_code)]
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("config error: {0}")]
