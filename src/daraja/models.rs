@@ -82,3 +82,48 @@ pub struct StkPushResponse {
     #[serde(rename = "CustomerMessage")]
     pub customer_message: String,
 }
+
+/// Top-level envelope Daraja POSTs to your callback URL after an STK push
+/// resolves (or fails to).
+#[derive(Debug, Clone, Deserialize)]
+pub struct StkCallbackEnvelope {
+    #[serde(rename = "Body")]
+    pub body: StkCallbackBody,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StkCallbackBody {
+    #[serde(rename = "stkCallback")]
+    pub stk_callback: StkCallback,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StkCallback {
+    #[allow(dead_code)] // not surfaced yet; will correlate against a stored request in Milestone 4
+    #[serde(rename = "MerchantRequestID")]
+    pub merchant_request_id: String,
+    #[serde(rename = "CheckoutRequestID")]
+    pub checkout_request_id: String,
+    #[serde(rename = "ResultCode")]
+    pub result_code: i64,
+    #[serde(rename = "ResultDesc")]
+    pub result_desc: String,
+    /// Present only on a successful payment (`ResultCode` 0); absent on
+    /// cancellation, timeout, and other failures.
+    #[serde(rename = "CallbackMetadata")]
+    pub callback_metadata: Option<CallbackMetadata>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CallbackMetadata {
+    #[serde(rename = "Item")]
+    pub item: Vec<CallbackMetadataItem>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CallbackMetadataItem {
+    #[serde(rename = "Name")]
+    pub name: String,
+    #[serde(rename = "Value")]
+    pub value: Option<serde_json::Value>,
+}

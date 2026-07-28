@@ -1,8 +1,8 @@
 # Running mpesa-dev
 
-Status: Milestone 1 (`doctor`) is implemented. `inspect`, `tunnel`, and
-`replay` are wired up as subcommands but still stubs — each prints what it
-will do and which milestone implements it.
+Status: Milestones 1 (`doctor`) and 2 (`inspect`) are implemented. `tunnel`
+and `replay` are wired up as subcommands but still stubs — each prints what
+it will do and which milestone implements it.
 
 ## Prerequisites
 
@@ -64,14 +64,14 @@ cargo build --release
 
 ```sh
 cargo run -- doctor    # runs sandbox/config checks (Milestone 1 — implemented)
-cargo run -- inspect   # will print live callbacks (Milestone 2 — stub)
+cargo run -- inspect   # prints live callbacks (Milestone 2 — implemented)
 cargo run -- tunnel    # will expose a public HTTPS URL (Milestone 3 — stub)
 cargo run -- replay    # will resend a stored callback (Milestone 4 — stub)
 ```
 
-`inspect`, `tunnel`, and `replay` currently print a short description of
-what they'll do once their milestone lands — this confirms the CLI, config
-loading, and subcommand wiring all work end to end.
+`tunnel` and `replay` currently print a short description of what they'll
+do once their milestone lands — this confirms the CLI, config loading, and
+subcommand wiring all work end to end.
 
 ### `doctor`
 
@@ -104,6 +104,45 @@ Example failure output (deliberately wrong credentials):
        fix: double check your consumer key/secret are copied correctly from an active Daraja app
 ```
 
+### `inspect`
+
+Starts a local HTTP server (default port `4321`, override with
+`MPESA_INSPECT_PORT` or `inspect_port`) that accepts a callback on any path
+or method, pretty-prints the JSON as it arrives, and decodes `ResultCode`
+into plain English using a static glossary (`src/daraja/result_code.rs`)
+compiled from the Daraja docs and real callback samples — cancellation,
+timeout, wrong PIN, insufficient funds, etc. For a recognized STK push
+callback it also prints the `CheckoutRequestID`, Daraja's own `ResultDesc`,
+and — on success — the amount, receipt number, and phone number from
+`CallbackMetadata`.
+
+```sh
+cargo run -- inspect
+```
+
+To see a real callback, point a Daraja `callback_url` at wherever this
+server is reachable and trigger an STK push (`doctor` does this for you as
+part of its passkey check). **Until `tunnel` (Milestone 3) lands, this only
+works if `inspect_port` is reachable from the public internet** — e.g. via
+your own reverse proxy or an ngrok-style tool — since Safaricom's sandbox
+can't reach `localhost` directly. In the meantime you can verify the server
+itself with a synthetic callback matching Daraja's documented shape:
+
+```sh
+curl -X POST http://127.0.0.1:4321/callback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Body": {
+      "stkCallback": {
+        "MerchantRequestID": "29115-34620561-1",
+        "CheckoutRequestID": "ws_CO_191220191020363925",
+        "ResultCode": 1032,
+        "ResultDesc": "Request cancelled by user"
+      }
+    }
+  }'
+```
+
 ## Project layout
 
 ```
@@ -114,12 +153,13 @@ src/
   error.rs            shared error type
   commands/
     doctor.rs         Milestone 1 (implemented)
-    inspect.rs         Milestone 2 (stub)
+    inspect.rs         Milestone 2 (implemented)
     tunnel.rs          Milestone 3 (stub)
     replay.rs          Milestone 4 (stub)
   daraja/
     client.rs         OAuth token fetch + in-memory cache, STK push
     models.rs         typed Daraja request/response structs
+    result_code.rs    ResultCode -> plain English glossary
 ```
 
 ## Running tests

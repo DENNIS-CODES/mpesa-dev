@@ -4,8 +4,8 @@ A single-binary CLI for M-Pesa Daraja local development. Diagnose config, inspec
 
 ## Status
 
-Milestone 1 (`doctor`) is implemented. `inspect`, `tunnel`, and `replay` are
-wired up as subcommands but not yet implemented.
+Milestones 1 (`doctor`) and 2 (`inspect`) are implemented. `tunnel` and
+`replay` are wired up as subcommands but not yet implemented.
 
 ## Quick start
 
@@ -23,6 +23,6 @@ details.
 | Command   | Milestone | Status | Purpose |
 |-----------|-----------|--------|---------|
 | `doctor`  | 1         | done   | Sequential sandbox/config checks (credentials, OAuth round trip, passkey/STK push, callback reachability, HTTPS cert, clock skew) with pass/fail/warn and suggested fixes |
-| `inspect` | 2         | stub   | Local server that prints incoming Daraja callbacks live, decoding ResultCode into plain English |
+| `inspect` | 2         | done   | Local Axum server that prints incoming Daraja callbacks live, decoding ResultCode into plain English |
 | `tunnel`  | 3         | stub   | Public HTTPS URL for your local callback endpoint, no ngrok required |
 | `replay`  | 4         | stub   | Resend a stored callback, with delay/duplicate/corrupt options |
