@@ -71,9 +71,19 @@ cargo build --release
 
 This crate builds two binaries: `mpesa-dev` (the CLI) and `mpesa-relay`
 (the tunnel relay, normally deployed on a VPS instead of your dev
-machine). To install `mpesa-dev` onto your `PATH`, run `cargo install`
-**from inside this directory** (the one containing `Cargo.toml`) with an
-explicit path — don't run bare `cargo install` with no arguments:
+machine). It's published on [crates.io](https://crates.io/crates/mpesa-dev),
+so from anywhere:
+
+```sh
+cargo install mpesa-dev
+```
+
+This installs both `mpesa-dev` and `mpesa-relay` onto your `PATH`.
+
+If you're working from a local checkout instead (e.g. contributing), run
+`cargo install` **from inside this directory** (the one containing
+`Cargo.toml`) with an explicit path — don't run bare `cargo install` with
+no arguments:
 
 ```sh
 cargo install --path . --bin mpesa-dev
@@ -361,15 +371,14 @@ changed:
 
 Three install paths, per the roadmap:
 
-1. **`cargo install`** — works today; see [above](#installing-with-cargo-install).
+1. **`cargo install mpesa-dev`** — published on
+   [crates.io](https://crates.io/crates/mpesa-dev); see
+   [above](#installing-with-cargo-install).
 2. **curl install script** (`scripts/install.sh`) — detects OS/arch
    (`linux/x86_64`, `macos/x86_64`, `macos/aarch64`; no prebuilt
    `linux/aarch64` yet) and downloads the matching binary from the
    [latest GitHub release](https://github.com/DENNIS-CODES/mpesa-dev/releases).
-   Depends on `.github/workflows/release.yml` actually having run against a
-   pushed `vX.Y.Z` tag — **this hasn't happened yet in this repository**, so
-   until the first tag is pushed, the script has no release to download and
-   the script itself is untested end to end.
+   `v0.1.0` has been tagged and released, so this path is live end to end.
 3. **Homebrew** — `packaging/homebrew/mpesa-dev.rb` is a formula template,
    not a published tap. Homebrew taps live in their own repo (conventionally
    `<owner>/homebrew-tap`), which is outside this repository — publishing it
