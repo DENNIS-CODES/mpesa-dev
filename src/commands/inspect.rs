@@ -1,17 +1,132 @@
+use std::net::SocketAddr;
+use std::time::Duration;
+
+use axum::body::Bytes;
+use axum::error_handling::HandleErrorLayer;
+use axum::extract::ConnectInfo;
+use axum::http::StatusCode;
+use axum::routing::any;
+use axum::{BoxError, Router};
+use chrono::Local;
+use colored::Colorize;
+use tower::timeout::TimeoutLayer;
+use tower::ServiceBuilder;
+
 use crate::config::Config;
+use crate::daraja::models::{CallbackMetadata, StkCallbackEnvelope};
+use crate::daraja::result_code::{self, Outcome};
 use crate::error::Result;
 
-/// Milestone 2 stub. Will start an Axum server bound to `config.inspect_port`
-/// that receives Daraja callbacks, pretty-prints them live, and decodes
-/// ResultCode into plain English.
+/// Starts a local HTTP server that accepts Daraja callbacks on any path and
+/// method, pretty-prints them as they arrive, and decodes ResultCode into
+/// plain English for recognized STK push callbacks.
 pub async fn run(config: &Config) -> Result<()> {
-    println!("inspect: not yet implemented (Milestone 2)");
-    println!();
-    println!(
-        "Will listen on port {} for incoming Daraja callbacks,",
-        config.inspect_port
+    let addr = format!("0.0.0.0:{}", config.inspect_port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+
+    println!("mpesa-dev inspect — listening on http://{addr}");
+    println!("Point your Daraja callback_url here (via a public tunnel) and trigger an STK push.");
+    println!("Press Ctrl+C to stop.\n");
+
+    let app = Router::new().fallback(any(handle_callback)).layer(
+        ServiceBuilder::new()
+            .layer(HandleErrorLayer::new(handle_timeout_error))
+            .layer(TimeoutLayer::new(Duration::from_secs(10))),
     );
-    println!("pretty-print the JSON as it arrives, and translate ResultCode");
-    println!("values (e.g. 1032 cancelled, 1037 timeout) into plain English.");
+
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
+
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
+}
+
+async fn handle_timeout_error(err: BoxError) -> (StatusCode, String) {
+    if err.is::<tower::timeout::error::Elapsed>() {
+        (StatusCode::REQUEST_TIMEOUT, "request timed out".to_string())
+    } else {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("unhandled internal error: {err}"),
+        )
+    }
+}
+
+async fn handle_callback(ConnectInfo(addr): ConnectInfo<SocketAddr>, body: Bytes) -> &'static str {
+    print_callback(addr, &body);
+    "ok"
+}
+
+fn print_callback(addr: SocketAddr, body: &[u8]) {
+    let now = Local::now().format("%H:%M:%S");
+    let rule = "─".repeat(60);
+
+    println!("{}", rule.dimmed());
+    println!("[{now}] callback from {addr}");
+
+    let text = String::from_utf8_lossy(body);
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        println!("{}", "(not valid JSON)".yellow());
+        println!("{text}");
+        println!("{}\n", rule.dimmed());
+        return;
+    };
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&value).unwrap_or_else(|_| text.to_string())
+    );
+
+    match serde_json::from_value::<StkCallbackEnvelope>(value) {
+        Ok(envelope) => {
+            let callback = envelope.body.stk_callback;
+            let (outcome, description) = result_code::describe(callback.result_code);
+            let line = format!("ResultCode {}: {description}", callback.result_code);
+            println!();
+            println!("CheckoutRequestID: {}", callback.checkout_request_id);
+            match outcome {
+                Outcome::Success => println!("{}", line.green().bold()),
+                Outcome::Failure => println!("{}", line.red().bold()),
+            }
+            println!("  Daraja says: {}", callback.result_desc);
+            if let Some(metadata) = &callback.callback_metadata {
+                println!("  {}", format_metadata(metadata));
+            }
+        }
+        Err(_) => {
+            println!();
+            println!("{}", "(not a recognized STK push callback shape)".dimmed());
+        }
+    }
+
+    println!("{}\n", rule.dimmed());
+}
+
+fn format_metadata(metadata: &CallbackMetadata) -> String {
+    let get = |name: &str| {
+        metadata
+            .item
+            .iter()
+            .find(|item| item.name == name)
+            .and_then(|item| item.value.as_ref())
+            .map(|value| match value {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            })
+            .unwrap_or_else(|| "?".to_string())
+    };
+
+    format!(
+        "Amount: {}   Receipt: {}   Phone: {}",
+        get("Amount"),
+        get("MpesaReceiptNumber"),
+        get("PhoneNumber")
+    )
 }
