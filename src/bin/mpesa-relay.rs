@@ -28,6 +28,7 @@ use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use tokio::sync::{mpsc, oneshot};
 
+use mpesa_dev::banner::icon;
 use mpesa_dev::tunnel_protocol::{
     is_forwardable_header, ClientToRelay, ForwardedRequest, ForwardedResponse, RelayToClient,
 };
@@ -70,11 +71,12 @@ async fn main() {
         .next()
         .unwrap_or(&bind_addr)
         .to_string();
-    println!("mpesa-relay bound to {bind_addr}");
+    println!("{} mpesa-relay bound to {bind_addr}", icon::ok());
     println!(
-        "tunnel clients connect to: wss://{public_base}/tunnel/ws (behind a TLS-terminating proxy)"
+        "{} tunnel clients connect to: wss://{public_base}/tunnel/ws (behind a TLS-terminating proxy)",
+        icon::arrow()
     );
-    println!("for local testing without a proxy: ws://127.0.0.1:{port}/tunnel/ws");
+    println!("  for local testing without a proxy: ws://127.0.0.1:{port}/tunnel/ws");
 
     let state = AppState {
         token,
@@ -130,7 +132,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let _ = tx.send(RelayToClient::Connected {
         public_url: public_url.clone(),
     });
-    println!("[{id}] connected -> {public_url}");
+    println!("{} [{id}] connected -> {public_url}", icon::ok());
 
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
@@ -156,7 +158,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     send_task.abort();
     state.registry.lock().unwrap().remove(&id);
-    println!("[{id}] disconnected");
+    println!("{} [{id}] disconnected", icon::skip());
 }
 
 async fn http_handler(

@@ -1,8 +1,11 @@
 # Running mpesa-dev
 
-Status: Milestones 1 (`doctor`), 2 (`inspect`), and 3 (`tunnel`) are
-implemented. `replay` is wired up as a subcommand but still a stub — it
-prints what it will do and which milestone implements it.
+Status: all four milestones are implemented — `doctor`, `inspect`, `tunnel`
+(+ `mpesa-relay`), and `replay`.
+
+Running `mpesa-dev` with no subcommand prints the banner and then behaves
+like `mpesa-dev inspect` — the default is "show me something happening,"
+not a usage error.
 
 ## Prerequisites
 
@@ -105,15 +108,12 @@ than whatever Cargo discovers by walking upward.
 ### Commands
 
 ```sh
-cargo run -- doctor    # runs sandbox/config checks (Milestone 1 — implemented)
-cargo run -- inspect   # prints live callbacks (Milestone 2 — implemented)
-cargo run -- tunnel    # exposes a public HTTPS URL via mpesa-relay (Milestone 3 — implemented)
-cargo run -- replay    # will resend a stored callback (Milestone 4 — stub)
+cargo run                # banner, then behaves like `inspect`
+cargo run -- doctor      # sandbox/config checks
+cargo run -- inspect     # print live callbacks, persisting each to callbacks/
+cargo run -- tunnel      # expose a public HTTPS URL via mpesa-relay
+cargo run -- replay      # resend a stored callback
 ```
-
-`replay` currently prints a short description of what it'll do once its
-milestone lands — this confirms the CLI, config loading, and subcommand
-wiring all work end to end.
 
 ### `doctor`
 
@@ -262,27 +262,105 @@ sandbox has neither). A real Safaricom-sandbox-originated callback still
 needs an actual deployment: a VPS, wildcard DNS, and Caddy in front, none
 of which exist in this environment.
 
+### `replay`
+
+`inspect` saves every callback it receives (that parses as JSON) to
+`callbacks/` as a timestamped file, e.g.
+`callbacks/20260728-153245_rc0_a1b2c3d4.json` — the `rc<N>` segment is the
+ResultCode when the payload is a recognized STK callback, so a plain
+directory listing is already informative. `replay` reads these back and
+resends them to `http://127.0.0.1:{inspect_port}`.
+
+With no arguments, it lists what's stored:
+
+```sh
+cargo run -- replay
+```
+
+```
+Stored callbacks (newest first):
+
+   1) 20260728-154749_rc1032_bpnyzpfa.json
+      ResultCode 1032: Cancelled — the customer pressed cancel on the STK prompt
+   2) 20260728-154749_rc0_a4ro3qbm.json
+      ResultCode 0: Success — the transaction completed
+
+Run `mpesa-dev replay <number-or-filename>` to resend one, e.g. `mpesa-dev replay 1`.
+```
+
+Pick one by index or filename, with optional flags:
+
+```sh
+cargo run -- replay 1                  # resend the newest one
+cargo run -- replay 1 --delay 500      # wait 500ms before sending
+cargo run -- replay 1 --duplicate      # send it twice, back to back
+cargo run -- replay 1 --corrupt        # truncate the payload before sending,
+                                        # to test how a receiver handles a
+                                        # malformed/truncated request body
+```
+
+`--corrupt` truncates the JSON at ~80% of its length and appends a marker,
+which reliably produces invalid JSON — useful for confirming `inspect` (or
+your own callback handler) doesn't crash on a bad body.
+
+## Packaging / installing
+
+Three install paths, per the roadmap:
+
+1. **`cargo install`** — works today; see [above](#installing-with-cargo-install).
+2. **curl install script** (`scripts/install.sh`) — detects OS/arch
+   (`linux/x86_64`, `macos/x86_64`, `macos/aarch64`; no prebuilt
+   `linux/aarch64` yet) and downloads the matching binary from the
+   [latest GitHub release](https://github.com/DENNIS-CODES/mpesa-dev/releases).
+   Depends on `.github/workflows/release.yml` actually having run against a
+   pushed `vX.Y.Z` tag — **this hasn't happened yet in this repository**, so
+   until the first tag is pushed, the script has no release to download and
+   the script itself is untested end to end.
+3. **Homebrew** — `packaging/homebrew/mpesa-dev.rb` is a formula template,
+   not a published tap. Homebrew taps live in their own repo (conventionally
+   `<owner>/homebrew-tap`), which is outside this repository — publishing it
+   means creating that repo, filling in the real sha256 hashes once a
+   release exists, and copying the formula in. See the comment at the top
+   of that file for the exact steps.
+
+Both the release workflow and the install script are written to the same
+target triples (`x86_64-unknown-linux-musl`, `x86_64-apple-darwin`,
+`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`), but neither has been
+exercised against a real GitHub Actions run in this session — there's no
+CI runner available here to verify them. `ci.yml` (build/clippy/fmt/test on
+every push and PR) is in the same boat: syntactically written, not
+yet observed passing.
+
 ## Project layout
 
 ```
 src/
   main.rs             mpesa-dev binary entry point: parses CLI args, loads config, dispatches
-  lib.rs              mpesa-dev library entry point: exposes tunnel_protocol to both binaries
+  lib.rs              mpesa-dev library entry point: exposes banner + tunnel_protocol to both binaries
+  banner.rs           ASCII banner, per-command header(), and the shared icon set (✓ ✗ ⚠ ○ →)
   tunnel_protocol.rs  shared websocket message types (relay <-> tunnel client)
-  cli.rs              clap arg/subcommand definitions
+  callback_store.rs   persists/lists/resolves callbacks under callbacks/ for inspect + replay
+  cli.rs              clap arg/subcommand definitions, colored --help styling
   config.rs           .mpesa-dev.toml + env var loading
   error.rs            shared error type
   commands/
-    doctor.rs         Milestone 1 (implemented)
-    inspect.rs        Milestone 2 (implemented)
-    tunnel.rs         Milestone 3 (implemented) — the CLI half of tunnel
-    replay.rs         Milestone 4 (stub)
+    doctor.rs         Milestone 1
+    inspect.rs        Milestone 2
+    tunnel.rs         Milestone 3 — the CLI half of tunnel
+    replay.rs         Milestone 4
   daraja/
     client.rs         OAuth token fetch + in-memory cache, STK push
     models.rs         typed Daraja request/response structs
     result_code.rs    ResultCode -> plain English glossary
   bin/
-    mpesa-relay.rs    Milestone 3 (implemented) — the relay half of tunnel, deployed separately
+    mpesa-relay.rs    Milestone 3 — the relay half of tunnel, deployed separately
+scripts/
+  install.sh          curl-installable script; downloads a release binary for your OS/arch
+packaging/
+  homebrew/mpesa-dev.rb  Homebrew formula template (not yet published to a tap)
+.github/workflows/
+  ci.yml              build/clippy/fmt/test on push and PR
+  release.yml         builds release binaries + GitHub Release on a vX.Y.Z tag push
 ```
 
 ## Running tests
