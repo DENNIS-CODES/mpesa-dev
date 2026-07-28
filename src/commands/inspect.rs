@@ -21,10 +21,14 @@ use crate::error::Result;
 /// method, pretty-prints them as they arrive, and decodes ResultCode into
 /// plain English for recognized STK push callbacks.
 pub async fn run(config: &Config) -> Result<()> {
-    let addr = format!("0.0.0.0:{}", config.inspect_port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let bind_addr = format!("0.0.0.0:{}", config.inspect_port);
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
 
-    println!("mpesa-dev inspect — listening on http://{addr}");
+    println!(
+        "mpesa-dev inspect — listening on http://127.0.0.1:{}",
+        config.inspect_port
+    );
+    println!("(bound to all interfaces at {bind_addr}, for tunnel/relay forwarding)");
     println!("Point your Daraja callback_url here (via a public tunnel) and trigger an STK push.");
     println!("Press Ctrl+C to stop.\n");
 

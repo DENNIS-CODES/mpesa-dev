@@ -19,3 +19,8 @@ environment = "sandbox"
 
 # Local port `inspect` listens on for incoming callbacks
 inspect_port = 4321
+
+# Websocket URL of a running mpesa-relay, and the shared token it expects.
+# Required only for `tunnel`. See RUNNING.md for how to run mpesa-relay.
+# relay_url = "wss://relay.example.com/tunnel/ws"
+# relay_token = "your-relay-token"
