@@ -3,9 +3,11 @@
 Status: all four milestones are implemented — `doctor`, `inspect`, `tunnel`
 (+ `mpesa-relay`), and `replay`.
 
-Running `mpesa-dev` with no subcommand prints the banner and then behaves
-like `mpesa-dev inspect` — the default is "show me something happening,"
-not a usage error.
+Running `mpesa-dev` with no subcommand prints the banner, then — in a real
+terminal — lets you pick `doctor`/`inspect`/`tunnel`/`replay` with the
+arrow keys and Enter (Esc to cancel and do nothing). Piped output, CI, or
+any other non-interactive context skips the picker and falls back to the
+old default of running `inspect`, so scripts aren't affected.
 
 ## Prerequisites
 
@@ -108,7 +110,7 @@ than whatever Cargo discovers by walking upward.
 ### Commands
 
 ```sh
-cargo run                # banner, then behaves like `inspect`
+cargo run                # banner, then an interactive picker (falls back to `inspect` if not a real terminal)
 cargo run -- doctor      # sandbox/config checks
 cargo run -- inspect     # print live callbacks, persisting each to callbacks/
 cargo run -- tunnel      # expose a public HTTPS URL via mpesa-relay
