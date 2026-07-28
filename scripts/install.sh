@@ -55,7 +55,7 @@ main() {
 
     [ -n "$download_url" ] || err "couldn't find a release asset for $target — see https://github.com/$REPO/releases"
 
-    tmp_dir=$(mktemp -d)
+    tmp_dir=$(mktemp -d 2>/dev/null || mktemp -d -t mpesa-dev)
     trap 'rm -rf "$tmp_dir"' EXIT
 
     say "Downloading $download_url"

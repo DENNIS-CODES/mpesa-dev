@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use chrono::Local;
+use chrono::Utc;
 use rand::Rng;
 
 use crate::daraja::models::StkCallbackEnvelope;
@@ -14,13 +14,14 @@ fn dir() -> PathBuf {
 }
 
 /// Saves a callback's parsed JSON to disk so `replay` can resend it later.
-/// Filenames sort chronologically and carry the ResultCode (when the
-/// payload is a recognized STK callback) so a directory listing alone is
-/// informative, e.g. `20260728-153245_rc0_a1b2c3d4.json`.
+/// Filenames sort chronologically (UTC, so this holds even across DST
+/// transitions) and carry the ResultCode (when the payload is a
+/// recognized STK callback) so a directory listing alone is informative,
+/// e.g. `20260728-153245_rc0_a1b2c3d4.json`.
 pub fn save(value: &serde_json::Value) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir())?;
 
-    let timestamp = Local::now().format("%Y%m%d-%H%M%S");
+    let timestamp = Utc::now().format("%Y%m%d-%H%M%S");
     let tag = serde_json::from_value::<StkCallbackEnvelope>(value.clone())
         .map(|envelope| format!("rc{}", envelope.body.stk_callback.result_code))
         .unwrap_or_else(|_| "raw".to_string());
@@ -61,8 +62,13 @@ pub fn list() -> std::io::Result<Vec<PathBuf>> {
 /// bare filename, or a path — to an actual stored callback file.
 pub fn resolve(selector: &str) -> Result<PathBuf> {
     if let Ok(index) = selector.parse::<usize>() {
+        if index == 0 {
+            return Err(Error::Config(
+                "stored callbacks are 1-indexed; try `mpesa-dev replay 1`".to_string(),
+            ));
+        }
         let files = list()?;
-        return files.get(index.saturating_sub(1)).cloned().ok_or_else(|| {
+        return files.get(index - 1).cloned().ok_or_else(|| {
             Error::Config(format!(
                 "no stored callback #{index}; run `mpesa-dev replay` with no arguments to see what's available"
             ))

@@ -1,10 +1,5 @@
 use colored::Colorize;
 
-/// M-Pesa's brand green, used for the banner and other one-off accents.
-/// Everyday status output still uses `colored`'s named colors (green/red/
-/// yellow) so it degrades sensibly on terminals without truecolor support.
-const BRAND_GREEN: (u8, u8, u8) = (0, 166, 81);
-
 const MARK: &str = r"███╗   ███╗
 ████╗ ████║
 ██╔████╔██║
@@ -12,18 +7,52 @@ const MARK: &str = r"███╗   ███╗
 ██║ ╚═╝ ██║
 ╚═╝     ╚═╝";
 
-/// Prints the full startup banner: the "M" mark plus tagline. Shown once,
-/// only when `mpesa-dev` is run with no subcommand.
+/// Gradient endpoints for the mark: a deep M-Pesa green at the top fading
+/// to a brighter green at the bottom, so the banner reads as one
+/// deliberately designed piece rather than a flat block of color. Chosen
+/// so every interpolated stop still maps to a sensible plain "green" on
+/// terminals without truecolor support (no COLORTERM=truecolor) — see
+/// `colored`'s 16-color fallback — rather than drifting into gray or cyan.
+const GRADIENT_START: (u8, u8, u8) = (0, 104, 55);
+const GRADIENT_END: (u8, u8, u8) = (20, 175, 95);
+
+const RULE_WIDTH: usize = 56;
+
+fn lerp(start: u8, end: u8, t: f32) -> u8 {
+    (start as f32 + (end as f32 - start as f32) * t).round() as u8
+}
+
+fn gradient_color(t: f32) -> (u8, u8, u8) {
+    (
+        lerp(GRADIENT_START.0, GRADIENT_END.0, t),
+        lerp(GRADIENT_START.1, GRADIENT_END.1, t),
+        lerp(GRADIENT_START.2, GRADIENT_END.2, t),
+    )
+}
+
+/// Prints the full startup banner: a dotted rule, the "M" mark rendered as
+/// a top-to-bottom color gradient, the tagline + version, and a closing
+/// rule. Shown once, only when `mpesa-dev` is run with no subcommand.
 pub fn print_full() {
+    let rule = "·".repeat(RULE_WIDTH).dimmed();
+
+    println!("{rule}");
     println!();
-    for line in MARK.lines() {
-        println!(
-            "{}",
-            line.truecolor(BRAND_GREEN.0, BRAND_GREEN.1, BRAND_GREEN.2)
-        );
+
+    let lines: Vec<&str> = MARK.lines().collect();
+    let last_index = lines.len().saturating_sub(1).max(1) as f32;
+    for (i, line) in lines.iter().enumerate() {
+        let (r, g, b) = gradient_color(i as f32 / last_index);
+        println!("{}", line.truecolor(r, g, b));
     }
+
     println!();
-    println!("{}", "M-Pesa Developer Toolkit".bold());
+    println!(
+        "{} {}",
+        "M-Pesa Developer Toolkit".bold(),
+        format!("v{}", env!("CARGO_PKG_VERSION")).dimmed()
+    );
+    println!("{rule}");
     println!();
 }
 

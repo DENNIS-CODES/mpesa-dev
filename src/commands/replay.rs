@@ -39,11 +39,12 @@ pub async fn run(
     }
 
     let target = format!("http://127.0.0.1:{}", config.inspect_port);
+    let http = reqwest::Client::new();
     println!();
-    send_once(&target, &body).await;
+    send_once(&http, &target, &body).await;
 
     if duplicate {
-        send_once(&target, &body).await;
+        send_once(&http, &target, &body).await;
     }
 
     Ok(())
@@ -71,8 +72,7 @@ fn print_list() -> Result<()> {
     Ok(())
 }
 
-async fn send_once(target: &str, body: &str) {
-    let http = reqwest::Client::new();
+async fn send_once(http: &reqwest::Client, target: &str, body: &str) {
     match http
         .post(target)
         .header("Content-Type", "application/json")
