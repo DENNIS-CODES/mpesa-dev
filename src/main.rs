@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         None => {
-            banner::print_full();
+            banner::print_full(&config.environment);
             commands::inspect::run(&config).await?
         }
         Some(Command::Doctor) => commands::doctor::run(&config).await?,

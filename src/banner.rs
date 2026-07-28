@@ -31,9 +31,10 @@ fn gradient_color(t: f32) -> (u8, u8, u8) {
 }
 
 /// Prints the full startup banner: a dotted rule, the "M" mark rendered as
-/// a top-to-bottom color gradient, the tagline + version, and a closing
-/// rule. Shown once, only when `mpesa-dev` is run with no subcommand.
-pub fn print_full() {
+/// a top-to-bottom color gradient, the tagline + version + environment,
+/// and a closing rule. Shown once, only when `mpesa-dev` is run with no
+/// subcommand.
+pub fn print_full(environment: &str) {
     let rule = "·".repeat(RULE_WIDTH).dimmed();
 
     println!("{rule}");
@@ -52,6 +53,15 @@ pub fn print_full() {
         "M-Pesa Developer Toolkit".bold(),
         format!("v{}", env!("CARGO_PKG_VERSION")).dimmed()
     );
+
+    let env_line = format!("Environment: {environment}");
+    if environment == "production" {
+        // Production talks to real money — make it impossible to miss.
+        println!("{}", env_line.black().on_yellow().bold());
+    } else {
+        println!("{}", env_line.dimmed());
+    }
+
     println!("{rule}");
     println!();
 }
