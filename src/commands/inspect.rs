@@ -205,9 +205,9 @@ fn print_tally(stats: &SharedStats) {
 
 fn pluralize(count: u64, noun: &str) -> String {
     if count == 1 {
-        format!("{count} {noun}")
+        format!("{count} {noun}").to_string()
     } else {
-        format!("{count} {noun}s")
+        format!("{count} {noun}s").to_string()
     }
 }
 
@@ -229,7 +229,7 @@ fn mask_phone(phone: &str) -> String {
     }
     let start = &phone[..6];
     let end = &phone[phone.len() - 2..];
-    format!("{start}••••{end}")
+    format!("{start}••••{end}").to_string()
 }
 
 fn metadata_value(metadata: &CallbackMetadata, name: &str) -> String {
